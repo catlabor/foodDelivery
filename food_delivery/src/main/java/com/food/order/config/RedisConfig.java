@@ -1,5 +1,12 @@
 package com.food.order.config;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnSingleCandidate;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -8,11 +15,13 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
+import java.text.SimpleDateFormat;
+import java.util.TimeZone;
+
 @Configuration
 public class RedisConfig {
 
     @Bean
-    @ConditionalOnSingleCandidate
     public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory redisConnectionFactory) {
         RedisTemplate<String, Object> redisTemplate = new RedisTemplate<>();
         redisTemplate.setConnectionFactory(redisConnectionFactory);
@@ -30,6 +39,15 @@ public class RedisConfig {
         // 设置Hash Value的序列化方式为Jackson2JsonRedisSerializer
         redisTemplate.setHashValueSerializer(jackson2JsonRedisSerializer);
 
+        ObjectMapper om=new ObjectMapper();
+        om.registerModule(new JavaTimeModule());
+//        om.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
+//        om.setDateFormat(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss"));
+//        om.setTimeZone(TimeZone.getDefault());
+//        om.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES,false);
+//        om.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS,false);
+//        om.setSerializationInclusion(JsonInclude.Include.NON_NULL);
+        jackson2JsonRedisSerializer.setObjectMapper(om);
         redisTemplate.afterPropertiesSet();
         return redisTemplate;
     }

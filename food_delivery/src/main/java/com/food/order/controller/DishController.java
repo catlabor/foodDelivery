@@ -13,9 +13,12 @@ import com.food.order.service.DishService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @RequestMapping("/dish")
@@ -32,10 +35,15 @@ public class DishController {
     @Autowired
     private CategoryService categoryService;
 
+    @Autowired
+    private RedisTemplate redisTemplate;
+
     @PostMapping
     public R<String> save(@RequestBody DishDto dishDto){
         log.info("save {}",dishDto.toString());
         dishService.saveWithFlavor(dishDto);
+        String dishId="dish_"+dishDto.getCategoryId()+"1";
+        redisTemplate.delete(dishId);
         return R.success("成功添加菜品");
     }
 
@@ -77,6 +85,8 @@ public class DishController {
     public R<String> update(@RequestBody DishDto dishDto){
         log.info("save {}",dishDto.toString());
         dishService.updateWithFlavor(dishDto);
+        String dishId="dish_"+dishDto.getCategoryId()+"1";
+        redisTemplate.delete(dishId);
         return R.success("成功修改菜品");
     }
 
@@ -93,29 +103,42 @@ public class DishController {
     @GetMapping("/list")
     public R<List<DishDto>> list(Dish dish){
         log.info("get the infomation of{}",dish.toString());
-        LambdaQueryWrapper<Dish> queryWrapper=new LambdaQueryWrapper<>();
-        queryWrapper.eq(dish.getCategoryId()!=null,Dish::getCategoryId,dish.getCategoryId());
-        queryWrapper.eq(Dish::getStatus,1);
-        queryWrapper.orderByAsc(Dish::getSort).orderByDesc(Dish::getUpdateTime);
-        List<Dish> list=dishService.list(queryWrapper);
+        List<DishDto> dishDtoData=null;
+        String uid="dish_"+dish.getCategoryId()+dish.getStatus();
 
-        List<DishDto> listDishDto=list.stream().map((item)->{
-            DishDto dto=new DishDto();
-            BeanUtils.copyProperties(item,dto);
-            Long categoryId = item.getCategoryId();
-            Category category = categoryService.getById(categoryId);
-            if(category!=null){
-                String name = category.getName();
-                dto.setCategoryName(name);
-            }
+        dishDtoData =(List<DishDto>) redisTemplate.opsForValue().get(uid);
 
-            LambdaQueryWrapper<DishFlavor> queryWrapper1=new LambdaQueryWrapper<>();
-            queryWrapper1.eq(DishFlavor::getDishId,item.getId());
-            List<DishFlavor> flavors = dishFlavorService.list(queryWrapper1);
-            dto.setFlavors(flavors);
-            return dto;
-        }).collect(Collectors.toList());
-        return R.success(listDishDto);
+        if(dishDtoData!=null){
+            return R.success(dishDtoData);
+        }else {
+            LambdaQueryWrapper<Dish> queryWrapper=new LambdaQueryWrapper<>();
+            queryWrapper.eq(dish.getCategoryId()!=null,Dish::getCategoryId,dish.getCategoryId());
+            queryWrapper.eq(Dish::getStatus,1);
+            queryWrapper.orderByAsc(Dish::getSort).orderByDesc(Dish::getUpdateTime);
+            List<Dish> list=dishService.list(queryWrapper);
+
+            List<DishDto> listDishDto=list.stream().map((item)->{
+                DishDto dto=new DishDto();
+                BeanUtils.copyProperties(item,dto);
+                Long categoryId = item.getCategoryId();
+                Category category = categoryService.getById(categoryId);
+                if(category!=null){
+                    String name = category.getName();
+                    dto.setCategoryName(name);
+                }
+
+                LambdaQueryWrapper<DishFlavor> queryWrapper1=new LambdaQueryWrapper<>();
+                queryWrapper1.eq(DishFlavor::getDishId,item.getId());
+                List<DishFlavor> flavors = dishFlavorService.list(queryWrapper1);
+                dto.setFlavors(flavors);
+                return dto;
+            }).collect(Collectors.toList());
+
+            redisTemplate.opsForValue().set(uid,listDishDto,60, TimeUnit.MINUTES);
+            return R.success(listDishDto);
+        }
+
+
     }
 
 }

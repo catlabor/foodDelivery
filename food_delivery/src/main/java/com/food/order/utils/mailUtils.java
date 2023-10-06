@@ -51,8 +51,8 @@ public class mailUtils {
         }catch (Exception e){
             e.printStackTrace();
         }
-        }
     }
+}
 //        Runnable emailTask=()->{
 //    public mailUtils(String code){
 //        this.code=code;

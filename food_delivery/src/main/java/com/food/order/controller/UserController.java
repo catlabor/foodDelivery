@@ -9,6 +9,7 @@ import com.food.order.utils.codeUtils;
 import com.food.order.utils.mailUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.StreamingHttpOutputMessage;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,6 +28,7 @@ import javax.mail.internet.MimeMessage;
 import javax.servlet.http.HttpSession;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @RestController
@@ -39,6 +41,9 @@ public class UserController {
     @Resource
     private mailUtils mailUtility;
 
+    @Autowired
+    private RedisTemplate redisTemplate;
+
     @PostMapping("/sendMsg")
     public R<String> sendMSG(@RequestBody User user, HttpSession session){
         String phone = user.getPhone();
@@ -48,7 +53,10 @@ public class UserController {
 //            Thread thread=new Thread(mail);
 //            thread.start();
             mailUtility.sendMail(codeGeneration);
-            session.setAttribute(phone,codeGeneration);
+
+            redisTemplate.opsForValue().set(phone,codeGeneration,30, TimeUnit.SECONDS);
+
+           // session.setAttribute(phone,codeGeneration);
             return R.success("successfully sending the mail");
         }
         return R.error("wrong with sending mail");
@@ -58,7 +66,12 @@ public class UserController {
     public R<User> login(@RequestBody Map map,HttpSession session){
         String phone = map.get("phone").toString();
         String code=map.get("code").toString();
-        Object codeObtained = session.getAttribute(phone);
+        //Object codeObtained = session.getAttribute(phone);
+
+        Object codeObtained=redisTemplate.opsForValue().get(phone);
+        if(codeObtained==null){
+            return R.error("timeout");
+        }
         if(codeObtained.equals(code)&&code!=null){
             LambdaQueryWrapper<User> queryWrapper=new LambdaQueryWrapper<>();
             queryWrapper.eq(User::getPhone,phone);
@@ -70,6 +83,7 @@ public class UserController {
                 userService.save(user);
             }
             session.setAttribute("user",user.getId());
+            redisTemplate.delete(phone);
             return R.success(user);
         }
         return R.error("wrong verification");
